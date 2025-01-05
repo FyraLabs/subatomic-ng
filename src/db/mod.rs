@@ -1,5 +1,5 @@
-pub mod tag;
 pub mod rpm;
+pub mod tag;
 
 use std::sync::LazyLock;
 
@@ -49,27 +49,19 @@ pub async fn connect_db(namespace: &str, db: &str) -> color_eyre::Result<()> {
     })
     .await?;
 
+    let schemas = vec![
+        include_str!("schema/rpm.surql"),
+        include_str!("schema/tag.surql"),
+        include_str!("schema/available_pkgs.surql"),
+    ];
+
     DB.use_ns(namespace).use_db(db).await?;
 
-    let q = DB
-        .query(
-            "
-    DEFINE TABLE IF NOT EXISTS person SCHEMALESS
-        PERMISSIONS FOR 
-            CREATE, SELECT WHERE $auth,
-            FOR UPDATE, DELETE WHERE created_by = $auth;
-    DEFINE FIELD IF NOT EXISTS name ON TABLE person TYPE string;
-    DEFINE FIELD IF NOT EXISTS created_by ON TABLE person VALUE $auth READONLY;
+    // todo: schema migration
+    for schema in schemas {
+        DB.query(schema).await?;
+    }
 
-    DEFINE INDEX IF NOT EXISTS unique_name ON TABLE user FIELDS name UNIQUE;
-    DEFINE ACCESS IF NOT EXISTS account ON DATABASE TYPE RECORD
-    SIGNUP ( CREATE user SET name = $name, pass = crypto::argon2::generate($pass) )
-    SIGNIN ( SELECT * FROM user WHERE name = $name AND crypto::argon2::compare(pass, $pass) )
-    DURATION FOR TOKEN 15m, FOR SESSION 12h
-    ;",
-        )
-        .await?;
-
-    println!("{:?}", q);
+    // println!("{:?}", q);
     Ok(())
 }

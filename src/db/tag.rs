@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 use surrealdb::{
     sql::{thing, Thing},
@@ -111,6 +113,14 @@ impl Tag {
         Ok(pkgs)
     }
 
+    pub fn export_dir(&self) -> PathBuf {
+        crate::config::CONFIG
+            .get()
+            .unwrap()
+            .export_dir
+            .join(&self.name)
+    }
+
     pub async fn assemble(&self) -> color_eyre::Result<()> {
         // let mut pkgs: surrealdb::Response = super::DB.query("SELECT * FROM rpm_package WHERE id IN (SELECT id, name, timestamp FROM rpm_package GROUP BY name,timestamp ORDER BY timestamp DESC LIMIT 1).id;").await?;
 
@@ -161,7 +171,7 @@ impl Tag {
 
         let staging_dir = staging_dir.canonicalize()?;
 
-        let export_dir = config.export_dir.join(&self.name);
+        let export_dir = self.export_dir();
 
         tokio::fs::create_dir_all(&export_dir.parent().unwrap()).await?;
 

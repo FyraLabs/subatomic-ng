@@ -82,6 +82,15 @@ impl Cache {
         Ok(())
     }
 
+    /// Refresh a cache entry, redownloading it from the object store
+    #[tracing::instrument]
+    pub async fn refresh(&self, key: &str) -> Result<PathBuf> {
+        let file = OBJECT_STORE.get().unwrap().get(key).await.unwrap();
+        self.put(key, &file).await?;
+
+        Ok(self.cache_dir.join(key))
+    }
+
     #[tracing::instrument]
     pub async fn remove(&self, key: &str) -> Result<()> {
         let path = self.cache_dir.join(key);
@@ -110,5 +119,32 @@ impl Cache {
         }
 
         Ok(())
+    }
+
+    pub async fn list_cached(&self) -> Result<Vec<String>> {
+        // read 2 levels deep to get the actual keys
+        let files = walkdir::WalkDir::new(&self.cache_dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .map(|e| {
+                e.path()
+                    .strip_prefix(&self.cache_dir)
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .collect::<Vec<String>>();
+
+        Ok(files)
+    }
+
+    /// Delete both the object from the object store and the cache
+    ///
+    /// You shouldn't need to use this unless you're hiding something
+    #[tracing::instrument]
+    pub async fn remove_upstream(&self, key: &str) -> Result<()> {
+        OBJECT_STORE.get().unwrap().delete(key).await?;
+        self.remove(key).await
     }
 }

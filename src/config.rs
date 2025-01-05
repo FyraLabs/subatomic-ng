@@ -4,10 +4,6 @@ use crate::{cache::Cache, obj_store::ObjectStore};
 use clap::Parser;
 use std::sync::OnceLock;
 
-fn fallback_region() -> String {
-    "us-west-2".to_string()
-}
-
 pub static CONFIG: OnceLock<Config> = OnceLock::new();
 
 #[derive(Parser, Debug, Clone)]
@@ -40,6 +36,10 @@ pub struct Config {
     #[clap(long, env = "CACHE_DIR", default_value = "/tmp/subatomic")]
     pub cache_dir: PathBuf,
 
+    #[clap(long, env = "NO_DOWNLOAD", default_value = "false")]
+    /// Don't download objects from the object store
+    pub no_download: bool,
+
     #[clap(long, env = "REPO_CACHE_DIR", default_value = "/tmp/subatomic/repo")]
     /// Directory to cache generated repos to
     ///
@@ -66,6 +66,10 @@ pub struct Config {
     /// Contains repos generated from each tag, symlinked to another cache directory.
     #[clap(long, env = "EXPORT_DIR", default_value = "/tmp/subatomic/export")]
     pub export_dir: PathBuf,
+
+    /// Address to listen on for the HTTP API
+    #[clap(long, env = "LISTEN_ADDR", default_value = "0.0.0.0:3000")]
+    pub listen_addr: String,
 }
 
 impl Config {

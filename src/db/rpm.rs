@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use surrealdb::{sql::Thing, RecordId};
 use ulid::Ulid;
 
+use crate::cache::cache;
+
 use super::{tag::TAG_TABLE, DB};
 pub const RPM_PREFIX: &str = "rpm";
 pub const RPM_TABLE: &str = "rpm_package";
@@ -27,16 +29,15 @@ impl RpmRef {
             object_key,
         }
     }
-    pub fn get(id: ulid::Ulid) -> color_eyre::Result<Self> {
-        // query database or something
-
-        todo!()
+    pub async fn get(id: ulid::Ulid) -> color_eyre::Result<Option<Self>> {
+        DB.get()
+            .select((RPM_TABLE, id.to_string()))
+            .await
+            .map_err(Into::into)
     }
 
-    pub fn get_full(&self) -> color_eyre::Result<Rpm> {
-        // query database or something
-
-        todo!()
+    pub async fn get_full(&self) -> color_eyre::Result<Rpm> {
+        Rpm::get(self.id).await?.ok_or_else(|| eyre!("not found"))
     }
 }
 
@@ -218,6 +219,11 @@ impl Rpm {
         let a: Option<Self> = DB.delete((RPM_TABLE, self.id.id.to_raw())).await?;
 
         tracing::debug!("deleted from db: {:#?}", a);
+
+
+        // Delete artifact
+
+        cache().remove_upstream(&self.object_key).await?;
 
         Ok(())
     }
