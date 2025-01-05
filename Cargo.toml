@@ -1,0 +1,24 @@
+[package]
+name = "subatomic-ng"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.8.1", features = ["macros", "multipart"] }
+chrono = { version = "0.4.39", features = ["serde"] }
+clap = { version = "4.5.23", features = ["derive", "env"] }
+color-eyre = "0.6.3"
+dotenvy = "0.15.7"
+futures = "0.3.31"
+futures-util = "0.3.31"
+paste = "1.0.15"
+rpm = "0.16.0"
+rust-s3 = "0.35.1"
+serde = { version = "1.0.217", features = ["derive"] }
+surrealdb = "2.1.4"
+thiserror = "2.0.9"
+tokio = { version = "1.42.0", features = ["full"] }
+tracing = { version = "0.1.41", features = ["log", "async-await"] }
+tracing-subscriber = { version = "0.3.19", features = ["chrono", "env-filter", "serde_json"] }
+tracing-test = "0.2.5"
+ulid = { version = "1.1.3", features = ["serde"] }

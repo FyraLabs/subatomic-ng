@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  surrealdb:
+    image: surrealdb/surrealdb:v2
+    container_name: surrealdb
+    ports:
+      - "8000:8000"
+    environment:
+      SURREAL_USER: root
+      SURREAL_PASS: root
+    volumes:
+      - ./db:/db
+    user: 1000:1000
+    command: start rocksdb:/db --log debug --user root --pass root 
