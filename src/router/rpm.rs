@@ -6,6 +6,7 @@ use axum::{
     Router,
 };
 use ulid::Ulid;
+use crate::obj_store::object_store;
 
 use crate::{cache::cache, config::CONFIG};
 use crate::db::rpm::Rpm;
@@ -80,7 +81,7 @@ pub async fn upload_rpm(mut multipart: Multipart) -> StatusCode {
     }
 
     if let (Some(filename), Some(data), Some(tag)) = (filename, data, tag) {
-        let cache = cache();
+        let objstore = object_store();
         tracing::info!("filename: {:?}", filename);
         // tracing::info!("data: {:?}", data);
         let dest = CONFIG.get().unwrap().cache_dir.join(filename);
@@ -99,17 +100,21 @@ pub async fn upload_rpm(mut multipart: Multipart) -> StatusCode {
 
         // Now push and upload to object store & cache
 
-        cache.put_and_upload(&rpm.object_key, dest).await.unwrap();
+        objstore.put(&rpm.object_key, &dest).await.unwrap();
 
         // Now commit to db
 
         let r = rpm.commit_to_db(true).await;
 
-        if r.is_ok() {
+        if let Ok(r) = r {
             return StatusCode::from_u16(200).unwrap();
+        } else {
+            tracing::error!("failed to commit to db: {:?}", r);
+            return StatusCode::from_u16(500).unwrap();
         }
 
-        StatusCode::from_u16(200).unwrap()
+        // StatusCode::from_u16(200).unwrap()
+        StatusCode::from_u16(500).unwrap()
     } else {
         StatusCode::from_u16(400).unwrap()
     }

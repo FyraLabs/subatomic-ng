@@ -2,9 +2,10 @@ use color_eyre::eyre::eyre;
 use rpm::{DependencyFlags, PackageMetadata};
 use serde::{Deserialize, Serialize};
 use surrealdb::{sql::Thing, RecordId};
+use tracing::trace;
 use ulid::Ulid;
 
-use crate::cache::cache;
+use crate::{cache::cache, obj_store::object_store};
 
 use super::{tag::TAG_TABLE, DB};
 pub const RPM_PREFIX: &str = "rpm";
@@ -220,16 +221,16 @@ impl Rpm {
 
         tracing::debug!("deleted from db: {:#?}", a);
 
-
         // Delete artifact
 
-        cache().remove_upstream(&self.object_key).await?;
+        object_store().remove(&self.object_key).await?;
 
         Ok(())
     }
 
     /// Commits the RPM object to the database, optionally marking it as the latest version in that tag
     pub async fn commit_to_db(&self, latest: bool) -> color_eyre::Result<()> {
+        trace!("committing to db");
         // insert into db
         let a: Option<Self> = DB
             .get()

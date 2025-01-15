@@ -2,6 +2,7 @@ use std::{env, path::PathBuf};
 
 use crate::obj_store::OBJECT_STORE;
 use color_eyre::Result;
+use tracing::trace;
 /// Object storage cache for S3 objects
 #[derive(Debug)]
 pub struct Cache {
@@ -26,6 +27,10 @@ impl Cache {
         }
         Self { cache_dir }
     }
+    
+    pub fn cache_dir(&self) -> &PathBuf {
+        &self.cache_dir
+    }
 
     /// Get a cache entry
     ///
@@ -38,7 +43,8 @@ impl Cache {
 
     /// Set a cache entry from a file
     #[tracing::instrument]
-    pub async fn put(&self, key: &str, path: &PathBuf) -> Result<()> {
+    pub async fn put(&self, key: &str, path: &PathBuf) -> Result<PathBuf> {
+        trace!("putting {} into cache", key);
         let dest = self.cache_dir.join(key);
 
         // make preceding directories if they don't exist
@@ -49,38 +55,53 @@ impl Cache {
         tokio::fs::copy(&path, &dest).await?;
         tokio::fs::remove_file(path).await?;
 
-        Ok(())
+        Ok(dest)
     }
-
-    /// Get a cache entry, downloading it if it doesn't exist.
-    ///
-    /// This is probably what you want to use.
-    ///
-    /// This will download the object from the object store if it doesn't exist in the cache.
+    
+    /// Set a cache entry from bytes
     #[tracing::instrument]
-    pub async fn get_or_download(&self, key: &str) -> Result<PathBuf> {
-        if let Some(path) = self.get(key) {
-            return Ok(path);
+    pub async fn put_bytes(&self, key: &str, bytes: &[u8]) -> Result<PathBuf> {
+        let dest = self.cache_dir.join(key);
+
+        // make preceding directories if they don't exist
+        if let Some(parent) = dest.parent() {
+            tokio::fs::create_dir_all(parent).await?;
         }
 
-        let file = OBJECT_STORE.get().unwrap().get(key).await.unwrap();
-        self.put(key, &file).await?;
+        tokio::fs::write(&dest, bytes).await?;
 
-        Ok(self.cache_dir.join(key))
+        Ok(dest)
     }
 
-    #[tracing::instrument]
-    pub async fn put_and_upload(&self, key: &str, path: PathBuf) -> Result<()> {
-        let path_clone = path.clone();
+    // /// Get a cache entry, downloading it if it doesn't exist.
+    // ///
+    // /// This is probably what you want to use.
+    // ///
+    // /// This will download the object from the object store if it doesn't exist in the cache.
+    // #[tracing::instrument]
+    // pub async fn get_or_download(&self, key: &str) -> Result<PathBuf> {
+    //     if let Some(path) = self.get(key) {
+    //         return Ok(path);
+    //     }
 
-        if env::var("NO_UPLOAD").is_err() {
-            tracing::debug!("uploading to object store");
-            OBJECT_STORE.get().unwrap().put_file(key, path).await?;
-        }
-        self.put(key, &path_clone).await?;
+    //     let file = OBJECT_STORE.get().unwrap().get(key).await.unwrap();
+    //     self.put(key, &file).await?;
 
-        Ok(())
-    }
+    //     Ok(self.cache_dir.join(key))
+    // }
+
+    // #[tracing::instrument]
+    // pub async fn put_and_upload(&self, key: &str, path: PathBuf) -> Result<()> {
+    //     let path_clone = path.clone();
+
+    //     if env::var("NO_UPLOAD").is_err() {
+    //         tracing::debug!("uploading to object store");
+    //         OBJECT_STORE.get().unwrap().put_file(key, path).await?;
+    //     }
+    //     self.put(key, &path_clone).await?;
+
+    //     Ok(())
+    // }
 
     /// Refresh a cache entry, redownloading it from the object store
     #[tracing::instrument]
@@ -139,12 +160,12 @@ impl Cache {
         Ok(files)
     }
 
-    /// Delete both the object from the object store and the cache
-    ///
-    /// You shouldn't need to use this unless you're hiding something
-    #[tracing::instrument]
-    pub async fn remove_upstream(&self, key: &str) -> Result<()> {
-        OBJECT_STORE.get().unwrap().delete(key).await?;
-        self.remove(key).await
-    }
+    // /// Delete both the object from the object store and the cache
+    // ///
+    // /// You shouldn't need to use this unless you're hiding something
+    // #[tracing::instrument]
+    // pub async fn remove_upstream(&self, key: &str) -> Result<()> {
+    //     OBJECT_STORE.get().unwrap().delete(key).await?;
+    //     self.remove(key).await
+    // }
 }

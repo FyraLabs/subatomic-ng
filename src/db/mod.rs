@@ -53,6 +53,7 @@ pub async fn connect_db(namespace: &str, db: &str) -> color_eyre::Result<()> {
         include_str!("schema/rpm.surql"),
         include_str!("schema/tag.surql"),
         include_str!("schema/available_pkgs.surql"),
+        include_str!("schema/event_log.surql"),
     ];
 
     DB.use_ns(namespace).use_db(db).await?;

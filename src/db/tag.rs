@@ -5,8 +5,9 @@ use surrealdb::{
     sql::{thing, Thing},
     RecordId,
 };
+use tracing::{debug, warn};
 
-use crate::cache::cache;
+use crate::{cache::cache, obj_store::object_store};
 
 use super::rpm::{Rpm, RpmRef};
 pub const TAG_TABLE: &str = "repo_tag";
@@ -124,6 +125,7 @@ impl Tag {
     pub async fn assemble(&self) -> color_eyre::Result<()> {
         // let mut pkgs: surrealdb::Response = super::DB.query("SELECT * FROM rpm_package WHERE id IN (SELECT id, name, timestamp FROM rpm_package GROUP BY name,timestamp ORDER BY timestamp DESC LIMIT 1).id;").await?;
 
+        debug!("assembling tag: {}", self.name);
         // let pkgs_vec: Vec<Rpm> = pkgs.take(0)?;
         // let p: Option<Rpm> = pkgs_vec.into_iter().next();
         let config = crate::config::CONFIG
@@ -141,6 +143,10 @@ impl Tag {
 
         let staging_dir = config.repo_cache_dir.join(&staging_dir_name);
 
+        if staging_dir.exists() {
+            return Err(color_eyre::eyre::eyre!("staging directory already exists"));
+        }
+
         tokio::fs::create_dir_all(&staging_dir).await?;
 
         futures::future::try_join_all(pkgs.into_iter().map(|pkg| {
@@ -148,9 +154,35 @@ impl Tag {
             async move {
                 let cache_key = &pkg.object_key;
                 let cache_key_filename = cache_key.split('/').last().unwrap();
-                let cache = cache();
-                let src = cache.get_or_download(cache_key).await?;
-                tokio::fs::symlink(src, staging_dir.join(cache_key_filename)).await?;
+                let obj_store = object_store();
+                let src = obj_store.get(cache_key).await?.canonicalize()?;
+                tracing::debug!(?src);
+
+                if staging_dir.join(cache_key_filename).exists() {
+                    warn!(
+                        ?cache_key,
+                        "File name seems to conflict, removing already existing file"
+                    );
+                    tokio::fs::remove_file(&staging_dir.join(cache_key_filename)).await?;
+                }
+
+                let target_path = staging_dir.join(format!(
+                    "{ulid}-{cache_key_filename}",
+                    ulid = pkg.id.id.to_raw()
+                ));
+                tokio::fs::remove_file(&target_path).await.ok();
+                let metadata = tokio::fs::metadata(&src).await?;
+                tracing::trace!(?metadata);
+                if target_path.metadata().is_ok() {
+                    warn!(
+                        ?cache_key,
+                        "File name seems to conflict, removing already existing file"
+                    );
+                    tokio::fs::remove_file(&target_path).await?;
+                }
+
+                debug!("Symlinking {} to {}", src.display(), target_path.display());
+                tokio::fs::symlink(src, target_path).await?;
 
                 Result::<_, color_eyre::Report>::Ok(())
             }
@@ -181,7 +213,9 @@ impl Tag {
             export_dir.display()
         );
 
-        tokio::fs::remove_file(&export_dir).await.ok();
+        if export_dir.exists() {
+            tokio::fs::remove_dir_all(&export_dir).await?;
+        }
 
         tokio::fs::symlink(&staging_dir.canonicalize()?, &export_dir).await?;
 

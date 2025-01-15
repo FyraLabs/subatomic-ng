@@ -8,10 +8,10 @@
 //! - Unavailable artifacts are no longer deleted, but marked as such
 //! - Exported repos are now rebuilt from scratch when a new artifact is marked available
 use axum::{
-    extract::{Multipart, Path},
+    extract::Path,
     http::StatusCode,
     response::Json,
-    routing::{delete, get, post, put},
+    routing::{delete, get, post},
     Router,
 };
 
