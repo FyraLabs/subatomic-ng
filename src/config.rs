@@ -165,7 +165,18 @@ impl Config {
                         .set(store)
                         .unwrap_or_else(|_| panic!("cannot set object store"));
                 },
-                ObjectStoreType::CacheOnly => todo!(),
+                ObjectStoreType::CacheOnly => {
+                    let store = crate::obj_store::CacheOnlyBackend::new();
+                    let store = Arc::new(store) as Arc<dyn StorageBackend>;
+                    
+                    let store = ObjectStorage::new(store, cfg.cache());
+                
+                    
+                    crate::obj_store::OBJECT_STORE
+                        .set(store)
+                        .unwrap_or_else(|_| panic!("cannot set object store"));
+                    
+                }
             }
             cfg
         }

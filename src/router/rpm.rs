@@ -8,7 +8,7 @@ use axum::{
 use ulid::Ulid;
 use crate::obj_store::object_store;
 
-use crate::{cache::cache, config::CONFIG};
+use crate::config::CONFIG;
 use crate::db::rpm::Rpm;
 
 pub fn route(router: Router) -> Router {
@@ -113,8 +113,6 @@ pub async fn upload_rpm(mut multipart: Multipart) -> StatusCode {
             return StatusCode::from_u16(500).unwrap();
         }
 
-        // StatusCode::from_u16(200).unwrap()
-        StatusCode::from_u16(500).unwrap()
     } else {
         StatusCode::from_u16(400).unwrap()
     }

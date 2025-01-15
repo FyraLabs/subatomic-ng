@@ -1,13 +1,10 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-use surrealdb::{
-    sql::{thing, Thing},
-    RecordId,
-};
+use surrealdb::{sql::Thing, RecordId};
 use tracing::{debug, warn};
 
-use crate::{cache::cache, obj_store::object_store};
+use crate::obj_store::object_store;
 
 use super::rpm::{Rpm, RpmRef};
 pub const TAG_TABLE: &str = "repo_tag";

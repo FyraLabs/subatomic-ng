@@ -6,16 +6,44 @@ use crate::cache::{cache, Cache};
 use crate::config::CONFIG;
 use async_trait::async_trait;
 use color_eyre::{eyre::eyre, Result};
-use object_store::local::LocalFileSystem;
 use object_store::path::Path as ObjectPath;
 use object_store::{ObjectStore, PutPayload};
 use tracing::{debug, info};
-use std::any::Any;
 // use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 // pub mod local_backend;
 // pub mod s3_backend;
+
+pub struct CacheOnlyBackend;
+
+/// A backend that only serves from the cache, no-op for every operation
+impl CacheOnlyBackend {
+    pub fn new() -> Self {
+        Self
+    }
+}
+#[async_trait]
+impl StorageBackend for CacheOnlyBackend {
+    async fn put_file(&self, _key: &str, _path: PathBuf) -> Result<()> {
+        Ok(())
+    }
+
+    async fn put_bytes(&self, _key: &str, _bytes: Vec<u8>) -> Result<()> {
+        Ok(())
+    }
+
+    async fn get_object(&self, key: &str) -> Result<PathBuf> {
+        let cache = cache();
+        let path = cache.get(key).ok_or_else(|| eyre!("object not found in cache"))?;
+        Ok(path)
+    }
+
+    async fn delete_object(&self, _key: &str) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[async_trait]
 pub trait StorageBackend: Send + Sync {
     

@@ -5,7 +5,7 @@ use surrealdb::{sql::Thing, RecordId};
 use tracing::trace;
 use ulid::Ulid;
 
-use crate::{cache::cache, obj_store::object_store};
+use crate::obj_store::object_store;
 
 use super::{tag::TAG_TABLE, DB};
 pub const RPM_PREFIX: &str = "rpm";
