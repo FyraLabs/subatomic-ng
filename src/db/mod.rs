@@ -1,6 +1,6 @@
 pub mod rpm;
 pub mod tag;
-
+pub mod gpg_key;
 use std::sync::LazyLock;
 
 use surrealdb::{

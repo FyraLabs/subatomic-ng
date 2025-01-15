@@ -12,13 +12,14 @@ use crate::config::CONFIG;
 use crate::db::rpm::Rpm;
 
 pub fn route(router: Router) -> Router {
-    router
-        .route("/rpm/{ulid}", get(get_rpm))
-        .route("/rpm/{ulid}", delete(delete_rpm))
-        .route("/rpm/{ulid}/available", post(mark_rpm_available))
-        .route("/rpm/{ulid}/available", delete(mark_rpm_unavailable))
-        .route("/rpms", get(get_all_rpms))
-        .route("/rpm/upload", put(upload_rpm))
+    router.route("/rpms", get(get_all_rpms))
+        .nest("/rpm", Router::new()
+        .route("/{ulid}", get(get_rpm))
+        .route("/{ulid}", delete(delete_rpm))
+        .route("/{ulid}/available", post(mark_rpm_available))
+        .route("/{ulid}/available", delete(mark_rpm_unavailable))
+        .route("/upload", put(upload_rpm)))
+        // .route("s", get(get_all_rpms)))
 }
 
 pub async fn get_rpm(Path(pkg_id): Path<Ulid>) -> Json<Rpm> {

@@ -1,5 +1,5 @@
 use color_eyre::eyre::eyre;
-use rpm::{DependencyFlags, PackageMetadata};
+use rpm::{signature::Signing, DependencyFlags, PackageMetadata};
 use serde::{Deserialize, Serialize};
 use surrealdb::{sql::Thing, RecordId};
 use tracing::trace;
@@ -7,7 +7,7 @@ use ulid::Ulid;
 
 use crate::obj_store::object_store;
 
-use super::{tag::TAG_TABLE, DB};
+use super::{gpg_key::GpgKey, tag::TAG_TABLE, DB};
 pub const RPM_PREFIX: &str = "rpm";
 pub const RPM_TABLE: &str = "rpm_package";
 
@@ -116,6 +116,8 @@ pub struct Rpm {
     pub provides: Vec<PkgDependency>,
     #[serde(default)]
     pub requires: Vec<PkgDependency>,
+    #[serde(default)]
+    pub signed_object_key: Option<String>,
 
     pub tag: RecordId,
     pub timestamp: surrealdb::sql::Datetime,
@@ -127,17 +129,39 @@ pub struct Rpm {
     available: bool,
 }
 
+fn get_split_id_string(id: &str) -> String {
+    // split into a tree-like directory structure using first two chars
+    format!("{}/{}/{}", &id[0..1], &id[1..2], id)
+}
+
+fn get_rpm_path(name: &str, epoch: u32, version: &str, release: &str, arch: &str) -> String {
+    format!("{name}-{epoch}:{version}-{release}.{arch}.rpm")
+}
+/// Generate the object key and signed key for an RPM object
+/// The object key is the path to the RPM object in the object store
+/// 
+/// The signed key is the path to the signed version of the RPM object, which can be used later to store the signed
+/// RPM object.
+fn rpm_object_key(id: String, rpm: &PackageMetadata) -> (String, String) {
+    let id_string = get_split_id_string(&id);
+
+    let name = rpm.get_name().unwrap();
+    let epoch = rpm.get_epoch().unwrap_or_default();
+    let version = rpm.get_version().unwrap();
+    let release = rpm.get_release().unwrap();
+    let arch = rpm.get_arch().unwrap();
+
+    let rpm_path = get_rpm_path(name, epoch, version, release, arch);
+    let object_key = format!("{RPM_PREFIX}/{id_string}/{rpm_path}");
+    let signed_key = format!("{RPM_PREFIX}/{id_string}/signed/{rpm_path}");
+
+    (object_key, signed_key)
+}
+
 impl Rpm {
     pub fn new(pkg_meta: PackageMetadata, tag: &str) -> color_eyre::Result<Self> {
         let id = Thing::from((RPM_TABLE, surrealdb::sql::Id::ulid()));
 
-        // split the slash by the first two characters with /,
-        // so it would be A/B/ABCD1234
-        // kind of like a hash directory
-        let id_string = {
-            let id = id.id.to_raw();
-            format!("{}/{}/{}", &id[0..1], &id[1..2], &id)
-        };
         let epoch = pkg_meta.get_epoch().unwrap_or_default();
         let name = pkg_meta.get_name()?.to_owned();
         let version = pkg_meta.get_version()?.to_owned();
@@ -157,9 +181,9 @@ impl Rpm {
         //          ^^^^ flags
         // let full_meta = pkg_meta;
         Ok(Rpm {
-            object_key: format!(
-                "{RPM_PREFIX}/{id_string}/{name}-{epoch}:{version}-{release}.{arch}.rpm"
-            ),
+            object_key: rpm_object_key(id.id.to_raw(), &pkg_meta).0,
+            // this should stay none until the package itself is signed
+            signed_object_key: None,
             id,
             epoch,
             name,
@@ -269,6 +293,53 @@ impl Rpm {
 
         Ok(a)
     }
+    
+    pub async fn sign(&self, key: GpgKey) -> color_eyre::Result<Self> {
+        
+            tracing::debug!("signing rpm");
+            let object_file = object_store().get(&self.object_key).await?;
+            tracing::trace!("got object file: {:?}", object_file);
+
+            let signer = rpm::signature::pgp::Signer::load_from_asc(&key.secret_key)?;
+            tracing::trace!(?signer, "loaded signer");
+
+            tracing::trace!("opening rpm");
+            let mut rpm = rpm::Package::open(object_file)?;
+            
+            
+            tracing::trace!("signing rpm");
+            rpm.sign(&signer)?;
+            
+            // write the signed rpm to the object store
+            let mut buf = Vec::new();
+            tracing::trace!("writing signed rpm to buffer");
+            rpm.write(&mut buf)?;
+            
+            let signed_key = self.signed_object_key.clone().unwrap_or_else(|| {
+                let (_, signed_key) = rpm_object_key(self.id.id.to_raw(), &rpm.metadata);
+                signed_key
+            });
+            
+            
+            tracing::trace!("putting signed rpm in object store");
+            object_store().put_bytes(&signed_key, buf).await?;
+            
+            tracing::trace!("updating db with signed key");
+            let res: Option<Self> = DB
+                .update((RPM_TABLE, self.id.id.to_raw()))
+                .content(
+                    Rpm {
+                        signed_object_key: Some(signed_key),
+                        ..self.clone()
+                    }
+                )
+                .await?;
+            
+            
+            Ok(res.ok_or_else(|| eyre!("failed to update entry"))?)
+
+            // todo!()
+        }
 }
 
 // upload rpm should generate that and, upload to object store, and then insert into db

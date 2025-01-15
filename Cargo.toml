@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 async-trait = "0.1.85"
 axum = { version = "0.8.1", features = ["macros", "multipart"] }
+axum_typed_multipart = { version = "0.15.1", features = ["tempfile_3"] }
 chrono = { version = "0.4.39", features = ["serde"] }
 clap = { version = "4.5.23", features = ["derive", "env"] }
 color-eyre = "0.6.3"
@@ -14,6 +15,8 @@ futures = "0.3.31"
 futures-util = "0.3.31"
 object_store = { version = "0.11.2", features = ["serde", "serde_json", "aws"] }
 paste = "1.0.15"
+pgp = "0.14.2"
+rand = "0.8.5"
 rpm = "0.16.0"
 rust-s3 = "0.35.1"
 serde = { version = "1.0.217", features = ["derive"] }

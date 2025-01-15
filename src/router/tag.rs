@@ -34,13 +34,17 @@ use crate::db::{rpm::RpmRef, tag::Tag};
 
 pub fn route(router: Router) -> Router {
     router
-        .route("/repo", post(create_tag))
+        .nest(
+            "/repo",
+            Router::new()
+                .route("/", post(create_tag))
+                .route("/", get(get_all_tags)) 
+                .route("/{id}", get(get_tag))
+                .route("/{id}", delete(delete_tag))
+                .route("/{id}/rpms", get(get_tag_rpms))
+                .route("/{id}/assemble", post(assemble_tag))
+        )
         .route("/repos", get(get_all_tags))
-        .route("/repo/{id}", get(get_tag))
-        .route("/repo/{id}", delete(delete_tag))
-        .route("/repo/{id}/rpms", get(get_tag_rpms))
-        .route("/repo", get(get_all_tags))
-        .route("/repo/{id}/assemble", post(assemble_tag))
     // .route("/tag/{id}/comps", put(upload_tag))
 }
 
