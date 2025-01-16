@@ -1,12 +1,14 @@
 use crate::errors::Result;
 use crate::obj_store::object_store;
-use axum::extract::Json;
+use axum::debug_handler;
+use axum::extract::{Json, Query};
 use axum::{
     extract::{Multipart, Path},
     http::StatusCode,
     routing::{delete, get, post, put},
     Router,
 };
+use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::config::CONFIG;
@@ -26,10 +28,15 @@ fn route_operations() -> Router {
         .route("/{ulid}/available", delete(mark_rpm_unavailable))
         .route("/upload", put(upload_rpm))
 }
+#[derive(Debug, Deserialize)]
+pub struct RpmUploadParams {
+    prune: bool,
+}
 pub async fn get_rpm(Path(pkg_id): Path<Ulid>) -> Result<Json<Rpm>> {
     let rpm = Rpm::get(pkg_id).await?.unwrap();
     Ok(Json(rpm))
 }
+
 
 pub async fn get_all_rpms() -> Result<Json<Vec<RpmRef>>> {
     let rpms = Rpm::get_all().await?;
@@ -53,8 +60,11 @@ pub async fn delete_rpm(Path(pkg_id): Path<Ulid>) -> Result<StatusCode> {
     rpm.delete().await?;
     Ok(StatusCode::OK)
 }
-
-pub async fn upload_rpm(mut multipart: Multipart) -> Result<StatusCode> {
+#[debug_handler]
+pub async fn upload_rpm(
+    Query(params): Query<RpmUploadParams>,
+    mut multipart: Multipart,
+) -> Result<StatusCode> {
     let mut filename = None;
     let mut data = None;
 
@@ -84,18 +94,13 @@ pub async fn upload_rpm(mut multipart: Multipart) -> Result<StatusCode> {
 
         // Now push and upload to object store & cache
 
-        objstore.put(&rpm.object_key, &dest).await.unwrap();
+        objstore.put(&rpm.object_key, &dest).await?;
 
         // Now commit to db
 
-        let r = rpm.commit_to_db(true).await;
+        rpm.commit_to_db(params.prune).await?;
 
-        if let Ok(r) = r {
-            return Ok(StatusCode::from_u16(200).unwrap());
-        } else {
-            tracing::error!("failed to commit to db: {:?}", r);
-            return Ok(StatusCode::from_u16(500).unwrap());
-        }
+        Ok(StatusCode::OK)
     } else {
         Ok(StatusCode::from_u16(400).unwrap())
     }

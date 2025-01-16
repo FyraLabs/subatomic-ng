@@ -6,7 +6,7 @@ use tracing::{debug, warn};
 
 use crate::obj_store::object_store;
 
-use super::rpm::{Rpm, RpmRef};
+use super::{gpg_key::GPG_KEY_TABLE, rpm::{Rpm, RpmRef}};
 pub const TAG_TABLE: &str = "repo_tag";
 pub const COMPOSE_TABLE: &str = "repo_assemble";
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +41,8 @@ pub struct Tag {
     pub id: Thing,
     pub name: String,
     pub comps_xml: Option<String>,
+    #[serde(default)]
+    pub signing_key: Option<RecordId>,
 }
 
 impl Tag {
@@ -49,6 +51,7 @@ impl Tag {
             id: Thing::from((TAG_TABLE, surrealdb::sql::Id::String(name.clone()))),
             name,
             comps_xml: None,
+            signing_key: None,
         }
     }
 
@@ -66,16 +69,21 @@ impl Tag {
     pub async fn get_all() -> color_eyre::Result<Vec<Self>> {
         Ok(super::DB.select(TAG_TABLE).await?)
     }
+    
+    pub fn set_gpg_key(&mut self, key: &str) {
+        self.signing_key = Some(RecordId::from_table_key(GPG_KEY_TABLE, key));
+    }
 
+    /// Create or update a tag in the database
     pub async fn save(&self) -> color_eyre::Result<Self> {
         // if already exists return error
-        if (super::DB
-            .select::<Option<Tag>>((TAG_TABLE, self.id.id.to_raw()))
-            .await?)
-            .is_some()
-        {
-            return Err(color_eyre::eyre::eyre!("tag already exists"));
-        }
+        // if (super::DB
+        //     .select::<Option<Tag>>((TAG_TABLE, self.id.id.to_raw()))
+        //     .await?)
+        //     .is_some()
+        // {
+        //     return Err(color_eyre::eyre::eyre!("tag already exists"));
+        // }
 
         let query: color_eyre::Result<Option<Self>> = super::DB
             .upsert((TAG_TABLE, self.id.id.to_raw()))

@@ -57,6 +57,14 @@ pub struct Config {
 
     #[clap(long, env = "OBJECT_STORE_TYPE", default_value = "s3")]
     pub object_store_type: ObjectStoreType,
+    
+    
+    /// Delete RPMs when they are marked as unavailable
+    /// 
+    /// This mimics old subatomic behavior, where setting the prune flag
+    /// would delete the object entirely, marking them permanently unavailable.
+    #[clap(long, env = "DELETE_WHEN_PRUNE", default_value = "false")]
+    pub delete_when_prune: bool,
 
     // #[clap(long, env = "S3_BUCKET")]
     // pub s3_bucket: String,

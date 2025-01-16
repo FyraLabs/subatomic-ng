@@ -15,6 +15,18 @@ use axum::{
     Router,
 };
 
+use axum_error_handler::AxumErrorResponse;
+use thiserror::Error;
+#[derive(Error, Debug, AxumErrorResponse)]
+pub enum TagError {
+    #[error("Tag not found")]
+    #[status_code("NOT_FOUND")]
+    NotFound,
+    #[error("Tag already exists")]
+    #[status_code("CONFLICT")]
+    AlreadyExists,
+}
+
 use crate::errors::Result;
 
 // single enum for now
@@ -46,14 +58,34 @@ fn route_operations() -> Router {
         .route("/", get(get_all_tags))
         .route("/{id}", get(get_tag))
         .route("/{id}", delete(delete_tag))
+        .route("/{id}/key", post(set_gpg_key))
         .route("/{id}/rpms", get(get_tag_rpms))
         .route("/{id}/assemble", post(assemble_tag))
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetGpgKey {
+    key_id: String,
+}
+
 pub async fn get_tag(Path(tag_id): Path<String>) -> Result<Json<Tag>> {
     let tag = Tag::get(&tag_id)
         .await?
-        .ok_or_else(|| crate::errors::Error::NotFound)?;
+        .ok_or_else(|| TagError::NotFound)?;
     Ok(Json(tag))
+}
+
+pub async fn set_gpg_key(
+    Path(tag_id): Path<String>,
+    Json(key): Json<SetGpgKey>,
+) -> Result<Json<Tag>> {
+    let mut tag = Tag::get(&tag_id)
+        .await?
+        .ok_or_else(|| TagError::NotFound)?;
+    let key = key.key_id;
+    tag.set_gpg_key(&key);
+
+    Ok(Json(tag.save().await?))
 }
 
 pub async fn get_tag_rpms(Path(tag_id): Path<String>) -> Result<Json<Vec<RpmRef>>> {
@@ -69,11 +101,15 @@ pub async fn get_all_tags() -> Result<Json<Vec<Tag>>> {
     let tags = Tag::get_all().await?;
     Ok(Json(tags))
 }
-
-pub async fn create_tag(tag: Json<CreateTag>) -> Result<Json<Tag>> {
+// #[debug_handler]
+pub async fn create_tag(tag: Json<CreateTag>) -> Result<(StatusCode, Json<Tag>)> {
+    let existing_tag = Tag::get(&tag.name).await?;
+    if existing_tag.is_some() {
+        return Err(TagError::AlreadyExists.into());
+    }
     let tag = Tag::new(tag.name.clone());
-    let tag = tag.save().await?;
-    Ok(Json(tag))
+
+    Ok((StatusCode::CREATED, Json(tag.save().await?)))
 }
 
 pub async fn delete_tag(Path(tag_id): Path<String>) -> Result<StatusCode> {
@@ -81,7 +117,7 @@ pub async fn delete_tag(Path(tag_id): Path<String>) -> Result<StatusCode> {
         .await?
         .ok_or_else(|| crate::errors::Error::NotFound)?;
     tag.delete().await?;
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn assemble_tag(Path(tag_id): Path<String>) -> Result<StatusCode> {
@@ -89,5 +125,5 @@ pub async fn assemble_tag(Path(tag_id): Path<String>) -> Result<StatusCode> {
         .await?
         .ok_or_else(|| crate::errors::Error::NotFound)?;
     tag.assemble().await?;
-    Ok(StatusCode::OK)
+    Ok(StatusCode::ACCEPTED)
 }

@@ -13,4 +13,4 @@ macro_rules! apply_routes {
     };
 }
 
-apply_routes!([rpm, tag]);
+apply_routes!([rpm, tag, gpg_keys]);
