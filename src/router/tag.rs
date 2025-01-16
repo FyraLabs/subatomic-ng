@@ -15,6 +15,8 @@ use axum::{
     Router,
 };
 
+use crate::errors::Result;
+
 // single enum for now
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -47,50 +49,45 @@ fn route_operations() -> Router {
         .route("/{id}/rpms", get(get_tag_rpms))
         .route("/{id}/assemble", post(assemble_tag))
 }
-
-pub async fn get_tag(Path(tag_id): Path<String>) -> Json<Tag> {
-    let tag = Tag::get(&tag_id).await.unwrap().unwrap();
-    Json(tag)
+pub async fn get_tag(Path(tag_id): Path<String>) -> Result<Json<Tag>> {
+    let tag = Tag::get(&tag_id)
+        .await?
+        .ok_or_else(|| crate::errors::Error::NotFound)?;
+    Ok(Json(tag))
 }
 
-pub async fn get_tag_rpms(Path(tag_id): Path<String>) -> Json<Vec<RpmRef>> {
-    let tag = Tag::get(&tag_id).await.unwrap().unwrap();
-    let rpms = tag.get_available_rpms().await.unwrap();
+pub async fn get_tag_rpms(Path(tag_id): Path<String>) -> Result<Json<Vec<RpmRef>>> {
+    let tag = Tag::get(&tag_id)
+        .await?
+        .ok_or_else(|| crate::errors::Error::NotFound)?;
+    let rpms = tag.get_available_rpms().await?;
     let rpms = rpms.iter().map(|r| r.into()).collect();
-    Json(rpms)
+    Ok(Json(rpms))
 }
 
-pub async fn get_all_tags() -> Json<Vec<Tag>> {
-    let tags = Tag::get_all().await.unwrap();
-    Json(tags)
+pub async fn get_all_tags() -> Result<Json<Vec<Tag>>> {
+    let tags = Tag::get_all().await?;
+    Ok(Json(tags))
 }
 
-pub async fn create_tag(tag: Json<CreateTag>) -> Json<Tag> {
+pub async fn create_tag(tag: Json<CreateTag>) -> Result<Json<Tag>> {
     let tag = Tag::new(tag.name.clone());
-    let tag = tag.save().await.unwrap();
-    Json(tag)
+    let tag = tag.save().await?;
+    Ok(Json(tag))
 }
 
-pub async fn delete_tag(Path(tag_id): Path<String>) -> StatusCode {
-    let tag = Tag::get(&tag_id).await.unwrap().unwrap();
-    let r = tag.delete().await;
-
-    if r.is_ok() {
-        return StatusCode::from_u16(200).unwrap();
-    }
-
-    StatusCode::from_u16(500).unwrap()
+pub async fn delete_tag(Path(tag_id): Path<String>) -> Result<StatusCode> {
+    let tag = Tag::get(&tag_id)
+        .await?
+        .ok_or_else(|| crate::errors::Error::NotFound)?;
+    tag.delete().await?;
+    Ok(StatusCode::OK)
 }
 
-pub async fn assemble_tag(Path(tag_id): Path<String>) -> StatusCode {
-    let tag = Tag::get(&tag_id).await.unwrap().unwrap();
-    let r = tag.assemble().await;
-
-    match r {
-        Ok(_) => StatusCode::from_u16(200).unwrap(),
-        Err(e) => {
-            tracing::error!("error assembling tag: {:#?}", e);
-            StatusCode::from_u16(500).unwrap()
-        }
-    }
+pub async fn assemble_tag(Path(tag_id): Path<String>) -> Result<StatusCode> {
+    let tag = Tag::get(&tag_id)
+        .await?
+        .ok_or_else(|| crate::errors::Error::NotFound)?;
+    tag.assemble().await?;
+    Ok(StatusCode::OK)
 }

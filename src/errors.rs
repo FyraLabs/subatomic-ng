@@ -1,25 +1,24 @@
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use axum::response::Response;
-use axum::Json;
 use thiserror::Error;
+use axum_thiserror::ErrorStatus;
+pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, ErrorStatus)]
 pub enum Error {
     #[error("database error")]
-    Db,
+    #[status(StatusCode::INTERNAL_SERVER_ERROR)]
+    Db(#[from] surrealdb::Error),
+    
+    // other error
+    #[error("error: {0}")]
+    #[status(StatusCode::INTERNAL_SERVER_ERROR)]
+    Other(#[from] color_eyre::Report),
+    
+    #[error("Server I/O error")]
+    #[status(StatusCode::INTERNAL_SERVER_ERROR)]
+    Io(#[from] std::io::Error),
+    
+    #[error("Not Found")]
+    #[status(StatusCode::NOT_FOUND)]
+    NotFound,
 }
-
-impl IntoResponse for Error {
-    fn into_response(self) -> Response {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(self.to_string())).into_response()
-    }
-}
-
-impl From<surrealdb::Error> for Error {
-    fn from(error: surrealdb::Error) -> Self {
-        eprintln!("{error}");
-        Self::Db
-    }
-}
-

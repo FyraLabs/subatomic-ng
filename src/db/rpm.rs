@@ -16,9 +16,12 @@ pub const RPM_TABLE: &str = "rpm_package";
 /// in lockfiles and other places where the full object is not needed.
 pub struct RpmRef {
     pub id: ulid::Ulid,
+    #[serde(skip_serializing)]
     rpm_id: RecordId,
     pub name: String,
     pub object_key: String,
+    pub signed_object_key: Option<String>,
+    pub tag: Option<String>,
 }
 
 impl RpmRef {
@@ -28,6 +31,8 @@ impl RpmRef {
             name,
             rpm_id: RecordId::from_table_key(RPM_TABLE, id.to_string()),
             object_key,
+            signed_object_key: None,
+            tag: None,
         }
     }
     pub async fn get(id: ulid::Ulid) -> color_eyre::Result<Option<Self>> {
@@ -49,6 +54,8 @@ impl From<&Rpm> for RpmRef {
             name: rpm.name.clone(),
             object_key: rpm.object_key.clone(),
             rpm_id: RecordId::from_table_key(RPM_TABLE, rpm.id.id.to_raw()),
+            signed_object_key: rpm.signed_object_key.clone(),
+            tag: Some(rpm.tag.key().to_string())
         }
     }
 }
@@ -139,7 +146,7 @@ fn get_rpm_path(name: &str, epoch: u32, version: &str, release: &str, arch: &str
 }
 /// Generate the object key and signed key for an RPM object
 /// The object key is the path to the RPM object in the object store
-/// 
+///
 /// The signed key is the path to the signed version of the RPM object, which can be used later to store the signed
 /// RPM object.
 fn rpm_object_key(id: String, rpm: &PackageMetadata) -> (String, String) {
@@ -281,7 +288,7 @@ impl Rpm {
     pub async fn get(id: ulid::Ulid) -> color_eyre::Result<Option<Self>> {
         let a: Option<Self> = DB.get().select((RPM_TABLE, id.to_string())).await?;
 
-        tracing::info!("got from db: {:#?}", a);
+        tracing::trace!(item = ?a, "got from db");
 
         Ok(a)
     }
@@ -293,53 +300,47 @@ impl Rpm {
 
         Ok(a)
     }
-    
+
     pub async fn sign(&self, key: GpgKey) -> color_eyre::Result<Self> {
-        
-            tracing::debug!("signing rpm");
-            let object_file = object_store().get(&self.object_key).await?;
-            tracing::trace!("got object file: {:?}", object_file);
+        tracing::debug!("signing rpm");
+        let object_file = object_store().get(&self.object_key).await?;
+        tracing::trace!("got object file: {:?}", object_file);
 
-            let signer = rpm::signature::pgp::Signer::load_from_asc(&key.secret_key)?;
-            tracing::trace!(?signer, "loaded signer");
+        let signer = rpm::signature::pgp::Signer::load_from_asc(&key.secret_key)?;
+        tracing::trace!(?signer, "loaded signer");
 
-            tracing::trace!("opening rpm");
-            let mut rpm = rpm::Package::open(object_file)?;
-            
-            
-            tracing::trace!("signing rpm");
-            rpm.sign(&signer)?;
-            
-            // write the signed rpm to the object store
-            let mut buf = Vec::new();
-            tracing::trace!("writing signed rpm to buffer");
-            rpm.write(&mut buf)?;
-            
-            let signed_key = self.signed_object_key.clone().unwrap_or_else(|| {
-                let (_, signed_key) = rpm_object_key(self.id.id.to_raw(), &rpm.metadata);
-                signed_key
-            });
-            
-            
-            tracing::trace!("putting signed rpm in object store");
-            object_store().put_bytes(&signed_key, buf).await?;
-            
-            tracing::trace!("updating db with signed key");
-            let res: Option<Self> = DB
-                .update((RPM_TABLE, self.id.id.to_raw()))
-                .content(
-                    Rpm {
-                        signed_object_key: Some(signed_key),
-                        ..self.clone()
-                    }
-                )
-                .await?;
-            
-            
-            Ok(res.ok_or_else(|| eyre!("failed to update entry"))?)
+        tracing::trace!("opening rpm");
+        let mut rpm = rpm::Package::open(object_file)?;
 
-            // todo!()
-        }
+        tracing::trace!("signing rpm");
+        rpm.sign(&signer)?;
+
+        // write the signed rpm to the object store
+        let mut buf = Vec::new();
+        tracing::trace!("writing signed rpm to buffer");
+        rpm.write(&mut buf)?;
+
+        let signed_key = self.signed_object_key.clone().unwrap_or_else(|| {
+            let (_, signed_key) = rpm_object_key(self.id.id.to_raw(), &rpm.metadata);
+            signed_key
+        });
+
+        tracing::trace!("putting signed rpm in object store");
+        object_store().put_bytes(&signed_key, buf).await?;
+
+        tracing::trace!("updating db with signed key");
+        let res: Option<Self> = DB
+            .update((RPM_TABLE, self.id.id.to_raw()))
+            .content(Rpm {
+                signed_object_key: Some(signed_key),
+                ..self.clone()
+            })
+            .await?;
+
+        Ok(res.ok_or_else(|| eyre!("failed to update entry"))?)
+
+        // todo!()
+    }
 }
 
 // upload rpm should generate that and, upload to object store, and then insert into db

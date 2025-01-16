@@ -9,7 +9,7 @@ use surrealdb::{
     Surreal,
 };
 
-static DB: SurrealClient = SurrealClient::new();
+pub static DB: SurrealClient = SurrealClient::new();
 
 pub struct SurrealClient {
     pub db: LazyLock<Surreal<Client>>,

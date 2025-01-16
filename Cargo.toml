@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 async-trait = "0.1.85"
 axum = { version = "0.8.1", features = ["macros", "multipart"] }
+axum-server = { version = "0.7.1", features = ["tokio-rustls"] }
+axum_thiserror = "0.1.0"
 axum_typed_multipart = { version = "0.15.1", features = ["tempfile_3"] }
 chrono = { version = "0.4.39", features = ["serde"] }
 clap = { version = "4.5.23", features = ["derive", "env"] }
