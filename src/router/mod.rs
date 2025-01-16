@@ -1,13 +1,12 @@
 use axum::Router;
+pub mod gpg_keys;
 pub mod rpm;
 pub mod tag;
-pub mod gpg_keys;
 macro_rules! apply_routes {
     ([$($module:ident),*]) => {
-        pub fn route(router: Router) -> Router {
-            let mut router = router;
+        pub fn route(mut router: Router) -> Router {
             $(
-                router = $module::route(router);
+                router = router.merge($module::route());
             )*
             router
         }

@@ -32,20 +32,20 @@ pub struct CreateTag {
 
 use crate::db::{rpm::RpmRef, tag::Tag};
 
-pub fn route(router: Router) -> Router {
-    router
-        .nest(
-            "/repo",
-            Router::new()
-                .route("/", post(create_tag))
-                .route("/", get(get_all_tags)) 
-                .route("/{id}", get(get_tag))
-                .route("/{id}", delete(delete_tag))
-                .route("/{id}/rpms", get(get_tag_rpms))
-                .route("/{id}/assemble", post(assemble_tag))
-        )
+pub fn route() -> Router {
+    Router::new()
         .route("/repos", get(get_all_tags))
-    // .route("/tag/{id}/comps", put(upload_tag))
+        .nest("/repo", route_operations())
+}
+
+fn route_operations() -> Router {
+    Router::new()
+        .route("/", post(create_tag))
+        .route("/", get(get_all_tags))
+        .route("/{id}", get(get_tag))
+        .route("/{id}", delete(delete_tag))
+        .route("/{id}/rpms", get(get_tag_rpms))
+        .route("/{id}/assemble", post(assemble_tag))
 }
 
 pub async fn get_tag(Path(tag_id): Path<String>) -> Json<Tag> {

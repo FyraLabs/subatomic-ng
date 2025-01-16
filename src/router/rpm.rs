@@ -1,27 +1,30 @@
+use crate::obj_store::object_store;
+use axum::extract::Json;
 use axum::{
     extract::{Multipart, Path},
     http::StatusCode,
-    response::Json,
     routing::{delete, get, post, put},
     Router,
 };
 use ulid::Ulid;
-use crate::obj_store::object_store;
 
 use crate::config::CONFIG;
 use crate::db::rpm::Rpm;
 
-pub fn route(router: Router) -> Router {
-    router.route("/rpms", get(get_all_rpms))
-        .nest("/rpm", Router::new()
+pub fn route() -> Router {
+    Router::new()
+        .route("/rpms", get(get_all_rpms))
+        .nest("/rpm", route_operations())
+}
+
+fn route_operations() -> Router {
+    Router::new()
         .route("/{ulid}", get(get_rpm))
         .route("/{ulid}", delete(delete_rpm))
         .route("/{ulid}/available", post(mark_rpm_available))
         .route("/{ulid}/available", delete(mark_rpm_unavailable))
-        .route("/upload", put(upload_rpm)))
-        // .route("s", get(get_all_rpms)))
+        .route("/upload", put(upload_rpm))
 }
-
 pub async fn get_rpm(Path(pkg_id): Path<Ulid>) -> Json<Rpm> {
     let rpm = Rpm::get(pkg_id).await.unwrap().unwrap();
     Json(rpm)
@@ -113,7 +116,6 @@ pub async fn upload_rpm(mut multipart: Multipart) -> StatusCode {
             tracing::error!("failed to commit to db: {:?}", r);
             return StatusCode::from_u16(500).unwrap();
         }
-
     } else {
         StatusCode::from_u16(400).unwrap()
     }
